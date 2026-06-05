@@ -275,7 +275,8 @@ class LossWeightsLogger(BaseLogger):
         
         # Handle different loss handler types
         if hasattr(loss_handler, 'loss_weighting_algorithm'):
-            if isinstance(loss_handler.loss_weighting_algorithm, list):
+            import torch.nn as nn
+            if isinstance(loss_handler.loss_weighting_algorithm, nn.ModuleList):
                 # Hierarchical_Loss_Handler with multiple algorithms
                 for idx, alg in enumerate(loss_handler.loss_weighting_algorithm):
                     self._log_weights_from_algorithm(
@@ -562,10 +563,10 @@ class PlotLogger(BaseLogger):
         # Draw the figure to render it
         fig.canvas.draw()
         
-        # Get the RGBA buffer from the figure
+        # Get the RGBA buffer from the figure (.copy() makes it writable for torch.from_numpy)
         buf = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-        buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-        
+        buf = buf.reshape(fig.canvas.get_width_height()[::-1] + (3,)).copy()
+
         # Convert to tensor and change from HWC to CHW format
         img_tensor = torch.from_numpy(buf).permute(2, 0, 1).float() / 255.0
         

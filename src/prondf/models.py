@@ -286,7 +286,7 @@ def Build_ProNDF(
     hidden_act_fn = "Tanh",
     output_act_fn = "Identity",
     probabilistic_manifolds = False,
-    probabililistic_output = True,
+    probabilistic_output = True,
     # Optimizer and regularizer params
     lr: float = 0.001,
     weight_decay_strength: float = 0.001,
@@ -296,7 +296,7 @@ def Build_ProNDF(
     # False - one-stage loss weighting w/ no weighting algorithm
     loss_weighting: bool = True,
     # Logging
-    loggers: Optional[List] = [LearningRateLogger()],  # List of logger instances for tracking training metrics
+    loggers: Optional[List] = None,  # List of logger instances for tracking training metrics
 ):
     """
     Streamlined constructor for ProNDF including basic functionality. For more 
@@ -316,6 +316,8 @@ def Build_ProNDF(
     Returns:
         ProNDF: Configured ProNDF model instance.
     """
+    if loggers is None:
+        loggers = [LearningRateLogger()]
     # Extract data parameters from dataset meta
     dsource = dataset_meta['dsource']
     dcat = dataset_meta.get('dcat', None)
@@ -332,7 +334,7 @@ def Build_ProNDF(
         B1_type = "Det_Block"
         B2_type = "Det_Block"
     # Block 3 type
-    if probabililistic_output:
+    if probabilistic_output:
         B3_type = "Prob_Block"
     else:
         B3_type = "Det_Block"
@@ -381,7 +383,7 @@ def Build_ProNDF(
         "output_act_fn": output_act_fn,
     }
     # Loss functions and regularizers
-    if probabililistic_output:
+    if probabilistic_output:
         loss_function_classes = ["Output_NLL_loss"]
         loss_function_configs = [{}]
         regularizer_classes = ["Output_IS_loss"]

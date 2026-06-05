@@ -11,3 +11,6 @@ logs/
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+
+# Test notebook for not-yet-public-facing code
+tests.ipynb

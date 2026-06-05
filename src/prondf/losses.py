@@ -8,7 +8,7 @@ Registries are used to enable serialization by PyTorch Lightning's checkpointing
 system and automatic hyperparameter saving, as class objects can not be serialized.
 Example usage:
     # Importing and using the registry and adding a custom loss
-    from losses import LOSS_REGISTRY, register_loss
+    from prondf.losses import LOSS_REGISTRY, register_loss
 
     # Registering a custom loss (inline or in this file)
     @register_loss("CustomLoss")
@@ -609,13 +609,14 @@ class No_Weighting(Base_LW_alg):
     """
     This class is used when no loss weighting is desired.
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         """
-        Initializes the No_Weighting loss weighting algorithm which does not apply any 
+        Initializes the No_Weighting loss weighting algorithm which does not apply any
         weighting to the loss and simply returns it as is.
+        Accepts and ignores **kwargs so that loss handlers which inject num_loss_terms
+        into all algorithm configs do not cause errors.
         """
         super(No_Weighting, self).__init__()
-        pass  # No parameters to register
 
     def forward(self, loss_terms):
         """
@@ -1013,8 +1014,10 @@ class Hierarchical_Loss_Handler(Base_Loss_Handler):
         # Set number of loss terms for each loss weighting algorithm
         for i in range(len(config["LW_alg_configs"])):
             config["LW_alg_configs"][i]["num_loss_terms"] = len(self.loss_functions) * self.num_splits[i]
-        # Instantiate the loss weighting algorithms
-        self.loss_weighting_algorithm = [LW_ALG_REGISTRY[config["LW_alg_classes"][i]](**config["LW_alg_configs"][i]) for i in range(len(config["LW_alg_classes"]))]
+        # Instantiate the loss weighting algorithms (nn.ModuleList so buffers are tracked by state_dict)
+        self.loss_weighting_algorithm = nn.ModuleList(
+            [LW_ALG_REGISTRY[config["LW_alg_classes"][i]](**config["LW_alg_configs"][i]) for i in range(len(config["LW_alg_classes"]))]
+        )
         # Instantiate regularizers if provided
         if "regularizer_classes" in config and "regularizer_configs" in config:
             self.regularizers = nn.ModuleList(

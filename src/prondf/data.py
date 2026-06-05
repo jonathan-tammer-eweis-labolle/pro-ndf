@@ -1,19 +1,9 @@
 """
 data.py
-This module contains classes and functions for generating and handling datasets to be 
-used with ProNDF. User may add additional or custom datasets via files, which can then 
+This module contains classes and functions for generating and handling datasets to be
+used with ProNDF. User may add additional or custom datasets via files, which can then
 be loaded.
 """
-
-# To include:
-# General analytic dataset generation function (NOTE - ensure we can pass a random generator object)
-# File to generate the dataset itself will be in the appropriate folder
-# Dataset classes to:
-#    - Batch data
-#    - Load from file
-#    - Save to file
-# Utility functions such as data normalization, etc. (should these go in eiher utils.py or in the dataset class instead?)
-# Start with the dataset class
 
 from __future__ import annotations
 import torch
@@ -507,11 +497,10 @@ def collate_fn(batch):
     targets_list = []
     
     for sample in batch:
-        # Convert to tensors if needed (samples from dataset are already tensors)
-        source_list.append(sample['source'] if isinstance(sample['source'], torch.Tensor) else torch.tensor(sample['source'], dtype=torch.float32))
-        cat_list.append(sample['cat'] if isinstance(sample['cat'], torch.Tensor) else torch.tensor(sample['cat'], dtype=torch.float32))
-        num_list.append(sample['num'] if isinstance(sample['num'], torch.Tensor) else torch.tensor(sample['num'], dtype=torch.float32))
-        targets_list.append(sample['targets'] if isinstance(sample['targets'], torch.Tensor) else torch.tensor(sample['targets'], dtype=torch.float32))
+        source_list.append(sample['source'])
+        cat_list.append(sample['cat'])
+        num_list.append(sample['num'])
+        targets_list.append(sample['targets'])
     
     return {
         'source': torch.stack(source_list),
@@ -793,38 +782,42 @@ def Generate_Analytic_Dataset(
         A MultiFidelityDataset object containing the generated dataset.
     """
     # Sanity checks
-    if quant_in and num_ranges is None:  # Check that num_ranges is provided if quant_in is True
+    if quant_in and num_ranges is None:
         raise ValueError("num_ranges must be provided if quant_in is True")
-    if len(num_samples) != dsource:  # Check that num_samples is provided for each source
+    if len(num_samples) != dsource:
         raise ValueError("num_samples must be provided for each source")
-    if len(source_functions) != dsource:  # Check that source_functions is provided for each source
+    if len(source_functions) != dsource:
         raise ValueError("source_functions must be provided for each source")
-    if len(noise_variance) != dsource:  # Check that noise_variance is provided for each source
+    if noise_variance is None:
         raise ValueError("noise_variance must be provided for each source")
-    if len(noise_variance[0]) != dtargets:  # Check that noise_variance is provided for each output dimension
+    if len(noise_variance) != dsource:
+        raise ValueError("noise_variance must be provided for each source")
+    if len(noise_variance[0]) != dtargets:
         raise ValueError("noise_variance must be provided for each output dimension")
-    if qual_in and len(dcat) != len(source_functions):  # Check that the number of categorical inputs is the same as the number of source functions
-        raise ValueError("The number of categorical inputs must be the same as the number of source functions")
-    if quant_in and len(num_ranges) != dnum:  # Check that the number of numerical input ranges is the same as the number of numerical inputs
+    if qual_in and (dcat is None or len(dcat) == 0):
+        raise ValueError("dcat must be a non-empty list when qual_in=True")
+    if quant_in and len(num_ranges) != dnum:
         raise ValueError("The number of numerical input ranges must be the same as the number of numerical inputs")
     # Initialize random generator if not provided
     if random_generator is None:
         random_generator = np.random.default_rng()
-    # Sample input space for each source
+    # Compute Sobol sampler dimensionality and per-type ranges/offsets
+    # Dimension order in Sobol samples: [num dims (if quant_in), cat dims (if qual_in)]
     d_all = 0
-    # Get numerical input ranges if necessary
+    num_col_start = None
+    cat_col_start = None
     if quant_in:
+        num_col_start = d_all
         d_all += dnum
         num_min = np.array([num_ranges[i][0] for i in range(dnum)])
         num_max = np.array([num_ranges[i][1] for i in range(dnum)])
-        num_ranges = num_max - num_min
-    # Get categorical input ranges if necessary
+        num_range_width = num_max - num_min
     if qual_in:
+        cat_col_start = d_all
         d_all += len(dcat)
         cat_min = np.zeros(len(dcat))
-        cat_max = np.array(dcat)
-        cat_ranges = (cat_min, cat_max)
-    sobol_sampler = qmc.Sobol(d_all, scramble=True, seed=random_generator)  # Initialize Sobol sampler
+        cat_range_width = np.array(dcat, dtype=float)
+    sobol_sampler = qmc.Sobol(d_all, scramble=True, seed=random_generator)
     # Generate data for each source
     source_data = []
     cat_data = []
@@ -835,17 +828,20 @@ def Generate_Analytic_Dataset(
         # Set source inputs
         source_temp = np.zeros((num_samples_temp, dsource))
         source_temp[:, i] = 1  # One-hot encoding
-        # Sample categorical inputs if present
-        if qual_in:
-            cat_temp = sobol_sampler.random(num_samples_temp) * cat_ranges + cat_min
-            cat_temp = np.floor(cat_temp)  # Convert to categorical levels
-        else:
-            cat_temp = None
-        # Sample numerical inputs if present
+        # Draw one batch of Sobol samples covering all input dimensions
+        sobol_samples = sobol_sampler.random(num_samples_temp)
+        # Extract and scale numerical inputs
         if quant_in:
-            num_temp = sobol_sampler.random(num_samples_temp) * num_ranges + num_min
+            num_temp = sobol_samples[:, num_col_start:num_col_start + dnum] * num_range_width + num_min
         else:
             num_temp = None
+        # Extract and scale categorical inputs (floor to integer levels)
+        if qual_in:
+            cat_temp = np.floor(
+                sobol_samples[:, cat_col_start:cat_col_start + len(dcat)] * cat_range_width + cat_min
+            )
+        else:
+            cat_temp = None
         # Generate targets
         targets_temp = source_functions[i](cat_temp, num_temp)
         # Ensure targets are 2D (n_samples, dtargets)

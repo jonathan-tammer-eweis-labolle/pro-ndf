@@ -6,7 +6,7 @@ Registries are used to enable serialization by PyTorch Lightning's checkpointing
 system and automatic hyperparameter saving, as class objects can not be serialized.
 Example usage:
     # Importing and using the registry and adding a custom block
-    from blocks import BLOCK_REGISTRY, register_block
+    from prondf.blocks import BLOCK_REGISTRY, register_block
 
     # Registering a custom block (inline or in this file)
     @register_block("CustomBlock")
