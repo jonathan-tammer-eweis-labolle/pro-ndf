@@ -1,0 +1,12 @@
+.git
+__pycache__
+*.py[cod]
+.pytest_cache
+.ipynb_checkpoints
+datasets/*/generated_data/
+lightning_logs/
+**/lightning_logs/
+logs/
+**/logs/
+notebooks/
+*.ipynb
