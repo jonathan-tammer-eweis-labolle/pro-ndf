@@ -5,12 +5,11 @@ description = "Probabilistic Neural Data Fusion (refactored)"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-  "numpy",
-  "scipy",
-  "matplotlib",
-  "torch",
-  "pytorch-lightning",
-  "dill",
+  "numpy>=1.25.0",
+  "scipy>=1.10.1",
+  "matplotlib>=3.7.1",
+  "torch>=2.0.1",
+  "pytorch-lightning>=1.9.5,<2.0",
 ]
 
 [build-system]

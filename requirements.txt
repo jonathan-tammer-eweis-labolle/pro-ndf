@@ -1,0 +1,15 @@
+# Docker container dependencies — versions pinned from torch2 conda environment.
+# This file is for building the devcontainer only; for package installation use pyproject.toml.
+# torch is excluded here — pre-installed in nvcr.io/nvidia/pytorch:23.07-py3 (torch==2.0.1, CUDA 11.7).
+
+# Core dependencies
+pytorch-lightning==1.9.5
+numpy==1.25.0
+scipy==1.10.1
+matplotlib==3.7.1
+
+# Dev / notebook tools
+pytest==9.0.3
+black==23.9.1
+jupyterlab==3.6.3
+ipykernel==6.25.0

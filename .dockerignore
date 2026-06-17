@@ -1,12 +1,49 @@
+# Git
 .git
+.gitignore
+
+# Python
 __pycache__
 *.py[cod]
+*$py.class
+*.so
+.Python
+.eggs
+*.egg-info
+.installed.cfg
+*.egg
 .pytest_cache
+
+# Virtual environments
+venv
+env
+.env
+
+# Jupyter
 .ipynb_checkpoints
+*.ipynb
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Datasets and Notebooks
 datasets/*/generated_data/
 lightning_logs/
 **/lightning_logs/
 logs/
 **/logs/
 notebooks/
-*.ipynb
+
+# Model weights (large files)
+*.bin
+*.pt
+*.pth
+*.safetensors
+
+# Misc
+
+.DS_Store
+Thumbs.db
