@@ -12,5 +12,17 @@ __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 
+# Packaging / build artifacts
+*.egg-info/
+build/
+dist/
+
+# Tooling caches
+.pytest_cache/
+.hypothesis/
+
+# Claude Code local (machine-specific) settings
+.claude/settings.local.json
+
 # Test notebook for not-yet-public-facing code
 tests.ipynb

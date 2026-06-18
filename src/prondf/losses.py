@@ -42,10 +42,10 @@ def IS_loss(mu, sigma, targets, alpha=0.05):
     """
     Computes the interval score loss.
     Args:
-        preds_dist (torch.distributions.Distribution): Predicted dist. object.
-        y (torch.Tensor): Target values.
+        mu (torch.Tensor): Mean of the predicted distribution.
+        sigma (torch.Tensor): Standard deviation of the predicted distribution.
+        targets (torch.Tensor): Target values.
         alpha (float): Significance level for the interval score, default is 0.05.
-        strength (float): Scaling factor for the loss, default is 1.0.
     Returns:
         torch.Tensor: The computed interval score loss.
     """
@@ -62,8 +62,8 @@ def KL_div_var_only_loss(var, targets, prior_var=0.01, eps=1e-8):
     """
     Computes the KL divergence loss focusing on variance.
     Args:
-        preds_dist (torch.distributions.Distribution): Predicted dist. object.
-        y (torch.Tensor): Target values.
+        var (torch.Tensor): Variance of the predicted distribution.
+        targets (torch.Tensor): Target values.
         prior_var (float): Prior variance for KL divergence.
         eps (float): Small value to avoid division by zero.
     Returns:
@@ -713,12 +713,14 @@ class Two_Moment_Weighting(Base_LW_alg):
                 # Calculate moment estimates w/ nugget to avoid instability
                 lambda_hat = ref_grads_max / (grads_mean + self.eps)
                 gamma_hat = ref_grads_max_sq / (grads_mean_sq + self.eps)
-                # Calculate moving averages
+                # Calculate moving averages using each term's own previous estimate
+                # (reading [self.ref_idx] here would always use the never-updated
+                # reference slot, collapsing the EMA to a single-step estimate).
                 lambda_mavg = (1 - self.alpha1) * self.lambdas[
-                    self.ref_idx
+                    idx
                 ] + self.alpha1 * lambda_hat
                 gamma_mavg = (1 - self.alpha2) * self.gammas[
-                    self.ref_idx
+                    idx
                 ] + self.alpha2 * gamma_hat
                 # Bias correction
                 m = lambda_mavg / (1 - torch.pow(1 - self.alpha1, step + 1))
@@ -1107,12 +1109,17 @@ class Hierarchical_Loss_Handler(Base_Loss_Handler):
         # Mask out empty splits (set to 0) to prevent them from contributing to loss
         # This ensures consistent loss values across batches with different source distributions
         masked_loss_terms = self.loss_terms * self.non_empty_mask.float()
-        # Apply inner loss weighting algorithm to the loss terms by multiplying 
-        # element-wise through each row of loss terms
-        # Ensure weights are on the same device as loss_terms
+        # Apply inner loss weighting algorithm to the loss terms by multiplying
+        # element-wise through each row of loss terms.
+        # Ensure weights are on the same device as loss_terms.
+        # loss_terms has shape (num_outer_splits, num_inner_splits); the inner
+        # weighting algorithm indexes the inner (dim=1) axis, so we apply the inner
+        # weights across that axis and then collapse it, leaving one term per outer
+        # split for the outer weighting algorithm. (Mirrors update_loss_weights, which
+        # feeds inner-indexed terms via sum(dim=0) to algorithm[0].)
         weights = self.loss_weighting_algorithm[0].weights.to(self.loss_terms.device)
         inner_weighted_loss = weights * masked_loss_terms
-        inner_weighted_loss = torch.sum(inner_weighted_loss, dim=0)
+        inner_weighted_loss = torch.sum(inner_weighted_loss, dim=1)
         # Apply outer loss weighting algorithm
         weighted_loss = self.loss_weighting_algorithm[1](inner_weighted_loss)
         # Apply regularizers if provided

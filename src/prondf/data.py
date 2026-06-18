@@ -256,23 +256,30 @@ class MultiFidelityDataset(Dataset):
 
 
 # Function to split a dataset into train, validation, and test sets
-def split_dataset(dataset: MultiFidelityDataset, split_ratios: list[float]) -> tuple[MultiFidelityDataset, MultiFidelityDataset, MultiFidelityDataset]:
+def split_dataset(
+    dataset: MultiFidelityDataset,
+    split_ratios: list[float],
+    random_generator: np.random.Generator = None,
+) -> tuple[MultiFidelityDataset, MultiFidelityDataset, MultiFidelityDataset]:
     """
     Splits a dataset into train, validation, and test sets.
-    
+
     The split is performed separately for each data source, ensuring that each source
     is split according to the specified ratios. This maintains the distribution of
     sources across the splits.
-    
+
     Args:
         dataset: The MultiFidelityDataset to split.
         split_ratios: A list of 3 floats [train_ratio, val_ratio, test_ratio] that
             must sum to 1.0. For example, [0.7, 0.2, 0.1] for 70% train, 20% val, 10% test.
-    
+        random_generator: Optional numpy Generator used to shuffle each source's samples
+            before splitting. Pass a seeded generator (e.g. np.random.default_rng(0)) for
+            reproducible splits. If None, a fresh, unseeded generator is created.
+
     Returns:
         A tuple of three MultiFidelityDataset objects: (train_dataset, val_dataset, test_dataset).
         Each dataset has updated metadata with num_samples reflecting the split for each source.
-    
+
     Example:
         >>> train, val, test = split_dataset(dataset, [0.7, 0.2, 0.1])
     """
@@ -281,7 +288,10 @@ def split_dataset(dataset: MultiFidelityDataset, split_ratios: list[float]) -> t
         raise ValueError("split_ratios must be a list of 3 floats")
     if abs(sum(split_ratios) - 1.0) > 1e-6:  # Use small epsilon for floating point comparison
         raise ValueError("split_ratios must sum to 1.0")
-    
+    # Initialize random generator if not provided (seed it for reproducible splits)
+    if random_generator is None:
+        random_generator = np.random.default_rng()
+
     # Get number of sources from metadata
     dsource = dataset.meta.get('dsource')
     if dsource is None:
@@ -311,8 +321,8 @@ def split_dataset(dataset: MultiFidelityDataset, split_ratios: list[float]) -> t
             test_num_samples.append(0)
             continue
         
-        # Shuffle indices for randomness (optional, but recommended)
-        np.random.shuffle(source_indices)
+        # Shuffle indices for randomness (use the provided generator for reproducibility)
+        random_generator.shuffle(source_indices)
         
         # Calculate split sizes for this source
         train_size_source = int(num_source_samples * split_ratios[0])

@@ -27,6 +27,6 @@
             }
         }
     },
-    "postCreateCommand": "pip install --upgrade pip && echo 'Environment ready!'",
+    "postCreateCommand": "pip install --upgrade pip && pip install -e . && echo 'Environment ready!'",
     "remoteUser": "root"
 }

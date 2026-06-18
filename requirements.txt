@@ -8,6 +8,13 @@ numpy==1.25.0
 scipy==1.10.1
 matplotlib==3.7.1
 
+# The NGC base image ships numba 0.57.x, which hard-caps numpy at <=1.24. Because
+# numpy is pinned to 1.25.0 above, that stale numba fails to import — and since the
+# image's torchmetrics eagerly imports librosa -> numba, this breaks every
+# `import pytorch_lightning`. numba >= 0.58 supports numpy 1.25, so we upgrade it
+# (and its llvmlite dependency) to keep the import chain working.
+numba>=0.58
+
 # Dev / notebook tools
 pytest==9.0.3
 black==23.9.1

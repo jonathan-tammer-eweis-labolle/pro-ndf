@@ -313,6 +313,35 @@ class TestWeightingAlgorithms:
         result = alg(terms)
         assert result.item() == pytest.approx(0.0)
 
+    def test_two_moment_weighting_ema_uses_own_state(self):
+        """Regression: the EMA must accumulate each term's own previous moment
+        (self.lambdas[idx]), not the never-updated reference slot
+        (self.lambdas[ref_idx]). With the old bug the seeded per-term state was
+        ignored, so lambdas[idx] would collapse toward ~0 after an update."""
+        from prondf.losses import Two_Moment_Weighting, Loss_Context
+
+        # Tiny model so update() can take gradients w.r.t. real parameters.
+        model = torch.nn.Linear(2, 1)
+        x = torch.randn(4, 2)
+        out = model(x)
+        # Two loss terms that both depend on the model parameters.
+        loss_terms = torch.stack([(out ** 2).mean(), (out + 1.0).pow(2).mean()])
+        ctx = Loss_Context(model, batch={}, outputs={})
+
+        # alpha small → previous (seeded) value dominates the moving average.
+        alg = Two_Moment_Weighting(num_loss_terms=2, ref_idx=0, alpha1=0.01, alpha2=0.01)
+        # Seed reference slot at 0 and the non-reference term at a large value.
+        with torch.no_grad():
+            alg.lambdas.copy_(torch.tensor([0.0, 100.0]))
+            alg.gammas.copy_(torch.tensor([0.0, 100.0]))
+
+        alg.update(loss_terms, ctx)
+
+        # New (correct) behavior: ~0.99 * 100 + tiny ≈ 99, so clearly tracks the
+        # term's own seeded value. Old (buggy) behavior would give ~0.99 * 0 ≈ 0.
+        assert alg.lambdas[1].item() > 50.0
+        assert alg.gammas[1].item() > 50.0
+
 
 # ---------------------------------------------------------------------------
 # losses — loss handlers
@@ -375,6 +404,23 @@ class TestLossHandlers:
         model.loss_handler.compute_loss_terms()
         # 2D: (num_outer_splits, num_inner_splits * num_loss_fns)
         assert model.loss_handler.loss_terms.ndim == 2
+
+    @pytest.mark.parametrize("dsource,dtargets", [(2, 3), (3, 2)])
+    def test_hierarchical_loss_unequal_dims(self, dsource, dtargets):
+        """Regression: compute_loss must collapse the inner (source) axis, not the
+        outer (output) axis. With the old sum(dim=0) the inner-weighted terms had
+        shape (dsource,) and were multiplied by the outer (dtargets,) weights,
+        which raises a broadcast error whenever dsource != dtargets (both > 1)."""
+        model, batch = self._build_hierarchical(dsource=dsource, dtargets=dtargets, n=12)
+        outputs = model.get_model_outputs(batch)
+        model.loss_handler.build_loss_context(model, batch, outputs)
+        model.loss_handler.compute_loss_terms()
+        # loss_terms is (num_outer=dtargets, num_inner=dsource)
+        assert model.loss_handler.loss_terms.shape == (dtargets, dsource)
+        model.loss_handler.update_loss_weights()
+        loss = model.loss_handler.compute_loss()
+        assert loss.ndim == 0
+        assert torch.isfinite(loss)
 
 
 # ---------------------------------------------------------------------------
@@ -476,6 +522,16 @@ class TestSplitDataset:
         ds = self._make_ds()
         with pytest.raises(ValueError):
             split_dataset(ds, [0.8, 0.2])
+
+    def test_split_reproducible_with_seeded_generator(self):
+        """A seeded generator must produce identical splits across calls."""
+        from prondf.data import split_dataset
+        ds = self._make_ds(n=99)
+        tr1, va1, te1 = split_dataset(ds, [0.7, 0.2, 0.1], random_generator=np.random.default_rng(0))
+        tr2, va2, te2 = split_dataset(ds, [0.7, 0.2, 0.1], random_generator=np.random.default_rng(0))
+        for a, b in ((tr1, tr2), (va1, va2), (te1, te2)):
+            np.testing.assert_array_equal(a.source, b.source)
+            np.testing.assert_array_equal(a.targets, b.targets)
 
     def test_save_load_splits_roundtrip(self, tmp_path):
         from prondf.data import split_dataset, save_splits, load_splits
